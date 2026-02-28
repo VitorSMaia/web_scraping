@@ -1,4 +1,8 @@
-/results
+/resultados
 /venv
 .history
 .env
+credentials.json
+__pycache__/
+*.pyc
+scraper/__pycache__/
