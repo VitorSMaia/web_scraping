@@ -166,3 +166,41 @@ class AcademicParser:
                             break
 
         return dados
+
+    @staticmethod
+    def extrair_disciplinas_20261(html):
+        """
+        Extrai as disciplinas do semestre 2026.1 com status 'Matriculado'.
+        Tabela alvo: id="tab_2026110"
+        """
+        soup = BeautifulSoup(html, 'html.parser')
+        disciplinas_matriculadas = []
+        
+        tabela_20261 = soup.find('table', id='tab_2026110')
+        if not tabela_20261:
+            return ""
+
+        # Itera pelas linhas da tabela
+        for tr in tabela_20261.find_all('tr'):
+            celulas = tr.find_all('td')
+            # Precisamos de pelo menos a coluna da disciplina (índice 3) e do status (última)
+            if len(celulas) >= 4:
+                # O status é a última <td>
+                status_texto = celulas[-1].get_text(strip=True)
+                
+                if status_texto == "Matriculado":
+                    # A disciplina está na 4ª <td> (índice 3)
+                    disciplina_raw = celulas[3].get_text(strip=True)
+                    
+                    # Limpeza robusta: 
+                    # 1. Remover prefixo de código (ex: EGR0004 - )
+                    limpo = re.sub(r"^[A-Z0-9]+\s*-\s*", "", disciplina_raw).strip()
+                    # 2. Remover de " - Curr." em diante
+                    limpo = re.sub(r"\s*-\s*Curr\..*$", "", limpo).strip()
+                    
+                    if limpo:
+                        # Remover qualquer hífen residual no final
+                        limpo = re.sub(r"\s*-\s*$", "", limpo).strip()
+                        disciplinas_matriculadas.append(limpo)
+
+        return " - ".join(disciplinas_matriculadas)

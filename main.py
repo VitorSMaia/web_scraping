@@ -109,6 +109,7 @@ class ScraperOrchestrator:
             'celular_financeiro': '',
             'situacao_academica': '',
             'data_matricula_conf': '',
+            'disciplinas_20261': '',
             'metodo_processamento': metodo
         }
 
@@ -127,14 +128,26 @@ class ScraperOrchestrator:
                 if self._buscar_ficha_academica(cpf):
                     dados_aluno.update(AcademicParser.extrair_dados_pessoais(self.driver.page_source))
                     dados_aluno.update(AcademicParser.extrair_vinculos_academicos(self.driver.page_source))
-                    
+                    dados_aluno['disciplinas_20261'] = AcademicParser.extrair_disciplinas_20261(self.driver.page_source)
+
                     if self._ir_para_historico():
                         dados_aluno.update(AcademicParser.extrair_dados_historico(self.driver.page_source))
+                    
+                    # Extrair disciplinas 2026.1 (disponíveis tanto na Ficha quanto no Histórico)
                 
                 # 2. Fluxo Financeiro (Email, Celular, Situação, Data Confirmação)
                 dados_fin = self._processar_financeiro_individual(cpf)
-                dados_aluno.update(dados_fin)
-
+                
+                for k, v in dados_fin.items():
+                    if k == 'disciplinas_20261_fallback':
+                        if v and not dados_aluno.get('disciplinas_20261'):
+                            dados_aluno['disciplinas_20261'] = v
+                    elif v:
+                        if k in ['email_financeiro', 'celular_financeiro', 'situacao_academica', 'data_matricula_conf']:
+                            dados_aluno[k] = v
+                        elif not dados_aluno.get(k):
+                            dados_aluno[k] = v
+                            
                 self.dados_coletados.append(dados_aluno)
                 self.logger.log(f"✓ Aluno concluído: {dados_aluno.get('nome', 'N/A')}")
 
@@ -244,7 +257,20 @@ class ScraperOrchestrator:
                     EC.presence_of_element_located((By.CLASS_NAME, "tabela_relatorio"))
                 )
                 
-                return AcademicParser.extrair_dados_financeiros(self.driver.page_source)
+                html_source = self.driver.page_source
+                dados_fin = AcademicParser.extrair_dados_financeiros(html_source)
+                
+                # Tenta extrair disciplinas_20261 e dados acadêmicos usando o HTML da Ficha acessada via Financeiro
+                dados_fin['disciplinas_20261_fallback'] = AcademicParser.extrair_disciplinas_20261(html_source)
+                
+                acad_fallback = AcademicParser.extrair_dados_pessoais(html_source)
+                acad_fallback.update(AcademicParser.extrair_vinculos_academicos(html_source))
+                
+                for k, v in acad_fallback.items():
+                    if v:
+                        dados_fin[k] = v
+                
+                return dados_fin
         except Exception as e:
             self.logger.log(f"✗ Erro no fluxo financeiro para {cpf}: {e}")
         
@@ -267,7 +293,7 @@ if __name__ == "__main__":
     # Exemplo de uso baseado no .env
     cpfs_str = os.getenv('CPFS', '')
     if cpfs_str:
-        cpfs = [c.strip() for c in cpfs_str.split(',')][:3] # Teste rápido com 3 CPFs
+        cpfs = [c.strip() for c in cpfs_str.split(',')]
         orchestrator.processar_cpfs_completo(cpfs)
         # orchestrator.processar_apenas_financeiro(cpfs)
     else:

@@ -24,7 +24,8 @@ class DataExporter:
             13: 'QTDE DE HORAS COMPLEMENTARES',     # qtde_horas_complementares
             14: 'EMAIL FINANCEIRO',                 # email_financeiro
             15: 'SITUAÇÃO ACADÊMICA',               # situacao_academica
-            16: 'MÉTODO DE PROCESSAMENTO'           # metodo_processamento
+            16: 'DISCIPLINAS 2026.1',               # disciplinas_20261
+            17: 'MÉTODO DE PROCESSAMENTO'           # metodo_processamento
         }
 
     def _preparar_dados_reordenados(self):
@@ -32,7 +33,7 @@ class DataExporter:
         dados_reordenados = []
         
         # Adiciona linha de cabeçalho
-        linha_cabecalho = {i: self.nomes_colunas[i] for i in range(17)}
+        linha_cabecalho = {i: self.nomes_colunas[i] for i in range(18)}
         dados_reordenados.append(linha_cabecalho)
         
         agora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
@@ -56,7 +57,8 @@ class DataExporter:
                 13: str(row.get('qtde_horas_complementares', '')),
                 14: str(row.get('email_financeiro', '')),
                 15: str(row.get('situacao_academica', '')),
-                16: str(row.get('metodo_processamento', ''))
+                16: str(row.get('disciplinas_20261', '')),
+                17: str(row.get('metodo_processamento', ''))
             }
             dados_reordenados.append(linha)
         

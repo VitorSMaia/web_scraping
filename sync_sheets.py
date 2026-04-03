@@ -18,7 +18,8 @@ def sincronizar_com_google_sheets():
         "DATA MATRÍCULA": {"coluna_online": 7, "sobrescrever": False},
         "CELULAR": {"coluna_online": 12, "sobrescrever": False},
         "E-MAIL": {"coluna_online": 13, "sobrescrever": False},
-        "SITUAÇÃO ACADÊMICA": {"coluna_online": 26, "sobrescrever": True}, 
+        "SITUAÇÃO ACADÊMICA": {"coluna_online": 26, "sobrescrever": False},
+        "DISCIPLINAS 2026.1": {"coluna_online": 16, "sobrescrever": True},
     }
     
     # 2. Configurações de Acesso
@@ -31,7 +32,7 @@ def sincronizar_com_google_sheets():
         return
 
     # 3. Abrir a Planilha
-    spreadsheet_id = "13XnsZ2he2JUhb78DN5S33rOFhy3Kbz1Q388WL3S_63A"
+    spreadsheet_id = "1BICo_ChYBMx-Ek_jue0VKVq7iZFR-6MKUxNrTwp_Kvs"
     try:
         sh = client.open_by_key(spreadsheet_id)
         worksheet = sh.worksheet("Planilha1")
