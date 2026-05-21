@@ -1,5 +1,6 @@
 from bs4 import BeautifulSoup
 import re
+from typing import Optional, Tuple
 
 class AcademicParser:
     @staticmethod
@@ -168,39 +169,116 @@ class AcademicParser:
         return dados
 
     @staticmethod
+    def _limpar_nome_disciplina_20261(disciplina_raw: str) -> str:
+        if not disciplina_raw:
+            return ""
+        limpo = re.sub(r"^[A-Z0-9]+\s*-\s*", "", disciplina_raw).strip()
+        limpo = re.sub(r"\s*-\s*Curr\..*$", "", limpo, flags=re.IGNORECASE).strip()
+        if limpo:
+            limpo = re.sub(r"\s*-\s*$", "", limpo).strip()
+        return limpo
+
+    @staticmethod
+    def _indices_colunas_disciplina_status(tr) -> Optional[Tuple[int, int]]:
+        """
+        Na linha de cabeçalho, resolve índices das colunas Disciplina e Status.
+        Layout legado (poucas colunas): disciplina índice 3, status última coluna.
+        """
+        tds = tr.find_all("td", recursive=False)
+        n = len(tds)
+        if n < 4:
+            return None
+        labels = [
+            re.sub(r"\s+", " ", td.get_text(" ", strip=True)).strip() for td in tds
+        ]
+        idx_status = None
+        for j in range(n - 1, -1, -1):
+            if labels[j] == "Status":
+                idx_status = j
+                break
+        if idx_status is None:
+            idx_status = n - 1
+        idx_disciplina = None
+        for j, lab in enumerate(labels):
+            if "Disciplina" in lab:
+                idx_disciplina = j
+                break
+        if idx_disciplina is None:
+            idx_disciplina = 3
+        return idx_disciplina, idx_status
+
+    @staticmethod
+    def _linha_parece_cabecalho_tabela_notas(tr) -> bool:
+        """Evita confundir linha de dados com cabeçalho (ex.: tabela 2026.2 com 12 colunas)."""
+        tds = tr.find_all("td", recursive=False)
+        if len(tds) < 4:
+            return False
+        classes0 = tds[0].get("class") or []
+        if "coluna_titulo" in classes0:
+            return True
+        t0 = tds[0].get_text(strip=True)
+        t1 = tds[1].get_text(strip=True) if len(tds) > 1 else ""
+        if t0 in ("Sem.", "Semestre") and t1 == "Curso":
+            return True
+        joined = " ".join(td.get_text(" ", strip=True) for td in tds)
+        return "Disciplina" in joined and "Status" in joined
+
+    @staticmethod
+    def _extrair_disciplinas_de_tabela_notas(tabela) -> str:
+        status_aceitos = frozenset({"Matriculado", "Aprovado*"})
+        disciplinas: list[str] = []
+
+        alvo = tabela.find("tbody") or tabela
+        rows = alvo.find_all("tr", recursive=False)
+
+        idx_disciplina: int | None = None
+        idx_status: int | None = None
+
+        for tr in rows:
+            tds = tr.find_all("td", recursive=False)
+            if len(tds) == 1:
+                colspan = int(tds[0].get("colspan", 1) or 1)
+                if colspan >= 6:
+                    continue
+
+            if idx_disciplina is None:
+                if AcademicParser._linha_parece_cabecalho_tabela_notas(tr):
+                    pair = AcademicParser._indices_colunas_disciplina_status(tr)
+                    if pair:
+                        idx_disciplina, idx_status = pair
+                continue
+
+            if len(tds) <= max(idx_disciplina, idx_status):
+                continue
+
+            status_texto = tds[idx_status].get_text(strip=True)
+            if status_texto not in status_aceitos:
+                continue
+
+            disciplina_raw = tds[idx_disciplina].get_text(strip=True)
+            limpo = AcademicParser._limpar_nome_disciplina_20261(disciplina_raw)
+            if limpo:
+                disciplinas.append(limpo)
+
+        return " - ".join(disciplinas)
+
+    @staticmethod
     def extrair_disciplinas_20261(html):
         """
-        Extrai as disciplinas do semestre 2026.1 com status 'Matriculado'.
-        Tabela alvo: id="tab_2026110"
+        Extrai disciplinas do período letivo (ex.: 2026.1 / 2026.2) com status
+        ``Matriculado`` ou ``Aprovado*``.
+
+        Procura, nesta ordem, tabelas ``id="tab_2026120"`` (layout atual com notas /
+        12 colunas) e ``id="tab_2026110"`` (layout anterior). Só considera ``<tr>``
+        filhos diretos do ``<tbody>`` da tabela principal, para não ler linhas de
+        tabelas internas (ex.: totais de créditos).
         """
-        soup = BeautifulSoup(html, 'html.parser')
-        disciplinas_matriculadas = []
-        
-        tabela_20261 = soup.find('table', id='tab_2026110')
-        if not tabela_20261:
-            return ""
-
-        # Itera pelas linhas da tabela
-        for tr in tabela_20261.find_all('tr'):
-            celulas = tr.find_all('td')
-            # Precisamos de pelo menos a coluna da disciplina (índice 3) e do status (última)
-            if len(celulas) >= 4:
-                # O status é a última <td>
-                status_texto = celulas[-1].get_text(strip=True)
-                
-                if status_texto == "Matriculado":
-                    # A disciplina está na 4ª <td> (índice 3)
-                    disciplina_raw = celulas[3].get_text(strip=True)
-                    
-                    # Limpeza robusta: 
-                    # 1. Remover prefixo de código (ex: EGR0004 - )
-                    limpo = re.sub(r"^[A-Z0-9]+\s*-\s*", "", disciplina_raw).strip()
-                    # 2. Remover de " - Curr." em diante
-                    limpo = re.sub(r"\s*-\s*Curr\..*$", "", limpo).strip()
-                    
-                    if limpo:
-                        # Remover qualquer hífen residual no final
-                        limpo = re.sub(r"\s*-\s*$", "", limpo).strip()
-                        disciplinas_matriculadas.append(limpo)
-
-        return " - ".join(disciplinas_matriculadas)
+        soup = BeautifulSoup(html, "html.parser")
+        for table_id in ("tab_2026120", "tab_2026110"):
+            tabela = soup.find("table", id=table_id)
+            if not tabela:
+                continue
+            texto = AcademicParser._extrair_disciplinas_de_tabela_notas(tabela)
+            if texto:
+                return texto
+        return ""
